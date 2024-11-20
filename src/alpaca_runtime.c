@@ -69,6 +69,8 @@ int main() {
 
     if (curr_program_pos->to_commit) {
         commit_all();
+    } else {
+        list_size = 0;
     }
     curr_program_pos->next_task();
 

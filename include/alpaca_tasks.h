@@ -24,8 +24,7 @@ void pre_commit(void* orig, void* priv_buff, unsigned size);
 typedef struct program_pos {
     void (*next_task)(
         void);       // This is the task that will be rerun on power failure
-    bool to_commit;  // Whether privatized buffer will be  will be done before
-                     // next_task is called
+    bool to_commit;  // Whether program is in commiting phase from last task
 } program_pos_t;
 
 extern NV_GLOBAL program_pos_t *curr_program_pos;
