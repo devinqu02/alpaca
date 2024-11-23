@@ -24,14 +24,11 @@ TEST_DIR = tests
 # 	clang temp.bc -o out
 # 	./out
 
-# %.so: %.o
-# 	$(CXX) -dylib -shared -o $@ $^
-
 # # Pattern rule to generate bitcode files
-# %-m2r.bc: $(TEST_DIR)/%.c
-# 	clang -Xclang -disable-O0-optnone -O0 -emit-llvm -fno-discard-value-names -c $< -o $*.bc
-# 	opt -mem2reg $*.bc -o $@
-# 	llvm-dis $*-m2r.bc 
+%-m2r.bc: $(TEST_DIR)/%.c
+	clang -Xclang -disable-O0-optnone -O2 -emit-llvm -fno-discard-value-names -Iinclude -c $< -o $*.bc
+	opt -mem2reg $*.bc -o $@
+	llvm-dis $*-m2r.bc
 
 all: bin/emulator bin/instrumented_app
 
@@ -44,7 +41,10 @@ bin/instrumented_app: tests/simple.c src/alpaca_runtime.c src/emulator_instrumen
 app: tests/simple.c alpaca_runtime.c 
 	clang -Wall -Wextra -Iinclude -o bin/app -fno-pie -no-pie tests/simple.c src/alpaca_runtime.c 
 
+alpaca_pass.so: src/llvm/alpaca_pass.cpp src/llvm/find_war.cpp
+	clang $(CXXFLAGS) -Iinclude -shared -o lib/$@ $^
+
 clean:
-	rm -f *.o *~ *.so *.bc *.ll *.out bin/*
+	rm -f *.o *~ *.so *.bc *.ll *.out bin/* lib/*
 
 .PHONY: clean all
