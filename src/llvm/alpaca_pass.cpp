@@ -30,8 +30,10 @@ struct alpaca_pass : public ModulePass {
             ts_war.insert(begin(war_in_task[f]), end(war_in_task[f]));
         }
 
+        // Create privatized copies
+        unordered_map<GlobalVariable*, GlobalVariable*> privatized;
         for (GlobalVariable* gv : ts_war) {
-            errs() << gv->getName() << '\n';
+            privatized[gv] = new GlobalVariable(gv->getType(), gv->isConstant(), gv->getLinkage(), gv->getInitializer(), gv->getName() + "_priv", gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
         }
 
         return false;

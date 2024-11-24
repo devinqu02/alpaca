@@ -41,7 +41,6 @@ vector<BasicBlock*> get_reverse_postorder(Function& f) {
 }
 
 bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unordered_set<Function*>>& adj_f) {
-    errs() << "checking " << nv_v->getName() << " in task " << sf.getName() << '\n';
     unordered_map<Function*, BitVector> in_f, out_f;
     unordered_map<BasicBlock*, BitVector> in_bb, out_bb;
     unordered_map<Instruction*, BitVector> in_i, out_i;
