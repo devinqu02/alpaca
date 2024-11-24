@@ -1,50 +1,35 @@
-CXXFLAGS = -rdynamic $(shell llvm-config --cxxflags) -g -O0 -fPIC
+CC = clang
+CFLAGS = -Wall -Wextra -Iinclude
+
+CXX = clang++  # Use clang++ for C++ files
+
+SRC_DIR = src
+LLVM_DIR = src/llvm
+BIN_DIR = bin
 TEST_DIR = tests
 
-# # Replace % with test name to compile test
-# test-licm-lpt-%: test-lpt-% licm.so dead_code_elimination.so
-# 	opt -enable-new-pm=0 -load ./licm.so -loop-invariant-code-motion $*-landing_pad.bc -o $*-licm.bc
-# 	llvm-dis $*-licm.bc 
-# 	opt -enable-new-pm=0 -load ./dead_code_elimination.so -dead-code-eliminate $*-licm.bc -o $*-final.bc
-# 	llvm-dis $*-final.bc 
 
-# # Replace % with test name to compile test
-# test-licm-%: licm.so dead_code_elimination.so %-m2r.bc
-# 	opt -enable-new-pm=0 -load ./licm.so -loop-invariant-code-motion $*-m2r.bc -o $*-licm.bc
-# 	llvm-dis $*-licm.bc 
-# 	opt -enable-new-pm=0 -load ./dead_code_elimination.so -dead-code-eliminate $*-licm.bc -o $*-final.bc
-# 	llvm-dis $*-final.bc 
+all: $(BIN_DIR)/emulator $(BIN_DIR)/simple.out
 
-# test-lpt-%: landing_pad.so %-m2r.bc
-# 	opt -enable-new-pm=0 -load ./landing_pad.so -landing-pad $*-m2r.bc -o $*-landing_pad.bc
-# 	llvm-dis $*-landing_pad.bc 
+# Compile LLVM pass
+$(BIN_DIR)/alpaca_pass.so: $(LLVM_DIR)/alpaca_pass.cpp $(LLVM_DIR)/find_war.cpp
+	$(CXX) -Iinclude -shared -fPIC -rdynamic $(shell llvm-config --cxxflags) -g -O0 -o $@ $^
 
-# run-%: %.bc dyn_inst_cnt.so
-# 	opt -enable-new-pm=0 -load ./dyn_inst_cnt.so -dyn-inst-cnt $*.bc -o temp.bc
-# 	clang temp.bc -o out
-# 	./out
+# Compile Emulator
+$(BIN_DIR)/emulator: $(SRC_DIR)/emulator.c
+	$(CC) $(CFLAGS) -o $@ $^
 
-# # Pattern rule to generate bitcode files
-%-m2r.bc: $(TEST_DIR)/%.c
-	clang -Xclang -disable-O0-optnone -O2 -emit-llvm -fno-discard-value-names -Iinclude -c $< -o $*.bc
-	opt -mem2reg $*.bc -o $@
-	llvm-dis $*-m2r.bc
+# Link tests with runtime and instrumentation
+$(BIN_DIR)/%.out: $(BIN_DIR)/%.o $(SRC_DIR)/alpaca_runtime.o  $(SRC_DIR)/emulator_instrumentation.o
+	$(CC) $(CFLAGS) -o $@ -fno-pie -no-pie $^
 
-all: bin/emulator bin/instrumented_app
-
-bin/emulator: src/emulator.c
-	clang -Wall -Wextra src/emulator.c -o bin/emulator
-
-bin/instrumented_app: tests/simple.c src/alpaca_runtime.c src/emulator_instrumentation.c
-	clang -Wall -Wextra -Iinclude -o bin/instrumented_app -fno-pie -no-pie tests/simple.c src/alpaca_runtime.c src/emulator_instrumentation.c
-
-app: tests/simple.c alpaca_runtime.c 
-	clang -Wall -Wextra -Iinclude -o bin/app -fno-pie -no-pie tests/simple.c src/alpaca_runtime.c 
-
-alpaca_pass.so: src/llvm/alpaca_pass.cpp src/llvm/find_war.cpp
-	clang $(CXXFLAGS) -Iinclude -shared -o lib/$@ $^
+# Compile tests
+$(BIN_DIR)/%.o: $(TEST_DIR)/%.c $(BIN_DIR)/alpaca_pass.so
+	$(CC) $(CFLAGS) -O0 -Xclang -disable-O0-optnone -emit-llvm -S $< -o $(BIN_DIR)/$*.ll
+	opt -mem2reg -enable-new-pm=0 -load $(BIN_DIR)/alpaca_pass.so -alpaca-pass -simplifycfg $(BIN_DIR)/$*.ll | llc -filetype=obj -o $@
+# TODO add more passes / switch to new pass manager
 
 clean:
-	rm -f *.o *~ *.so *.bc *.ll *.out bin/* lib/*
+	rm -f $(BIN_DIR)/*
 
 .PHONY: clean all

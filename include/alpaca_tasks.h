@@ -8,7 +8,7 @@
     transition_to_arg = func_name; \
     JUMP_TO(transition_to)
 #define JUMP_TO(func_name) __attribute__((musttail)) return func_name()
-#define TASK(func_name) void func_name(void)
+#define TASK(func_name) __attribute__((annotate("alpaca_task"))) void func_name(void)
 #define MAIN_TASK TASK(main_task)
 #define INITIALIZATION void initialization(void)
 #define NV_GLOBAL __attribute__((section("nv_data")))

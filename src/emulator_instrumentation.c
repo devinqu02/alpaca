@@ -51,7 +51,7 @@ void save_memory(void) {
 }
 
 // Signal handler for power-off simulation
-void on_power_off(int sig) {
+void on_power_off(__attribute__((unused)) int sig) {
     struct timespec ts;
     if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == -1) {
         perror("clock_gettime");
