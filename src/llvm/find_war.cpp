@@ -151,7 +151,7 @@ bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unor
     return false;
 }
 
-vector<GlobalVariable*> find_war(Function& f, vector<GlobalVariable*>& ts_all) {
+vector<GlobalVariable*> find_war(Function& task, vector<GlobalVariable*>& ts_all, unordered_map<Function*, unordered_set<Function*>>& used_functions) {
     unordered_map<Function*, unordered_set<Function*>> adj_f;
     unordered_set<Function*> visited;
     auto dfs = [&](auto& self, Function* f) -> void {
@@ -160,21 +160,23 @@ vector<GlobalVariable*> find_war(Function& f, vector<GlobalVariable*>& ts_all) {
             for (Instruction& i : bb) {
                 if (CallInst* ci = dyn_cast<CallInst>(&i)) {
                     Function* to = ci->getCalledFunction();
-                    adj_f[f].insert(to);
-                    adj_f[to].insert(f);
-                    if (visited.count(to)) {
-                        self(self, to);
+                    if (used_functions[&task].count(to)) {
+                        adj_f[f].insert(to);
+                        adj_f[to].insert(f);
+                        if (!visited.count(to)) {
+                            self(self, to);
+                        }
                     }
                 }
             }
         }
     };
-    adj_f[&f] = {};
-    dfs(dfs, &f);
+    adj_f[&task] = {};
+    dfs(dfs, &task);
 
     vector<GlobalVariable*> war;
     for (GlobalVariable* v : ts_all) {
-        if (is_ts_war(f, v, adj_f)) {
+        if (is_ts_war(task, v, adj_f)) {
             war.push_back(v);
         }
     }
