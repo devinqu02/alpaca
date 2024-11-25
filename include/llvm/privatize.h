@@ -7,4 +7,4 @@
 using namespace llvm;
 using namespace std;
 
-void privatize(Function*, unordered_set<GlobalVariable*>&, unordered_map<GlobalVariable*, GlobalVariable*>&, unordered_map<Function*, unordered_set<GlobalVariable*>>&, unordered_set<Function*>&);
+void privatize(Function*, unordered_set<GlobalVariable*>&, unordered_map<GlobalVariable*, GlobalVariable*>&, unordered_map<Function*, unordered_set<GlobalVariable*>>&, unordered_set<Function*>&, Function*);
