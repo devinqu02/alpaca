@@ -1,7 +1,10 @@
+#include "llvm/find_war.h"
+#include "llvm/privatize.h"
+
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
-#include <llvm/Support/raw_ostream.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -11,6 +14,27 @@
 
 using namespace llvm;
 
+unordered_set<Function*> get_used_functions(Function* task) {
+    unordered_set<Function*> used_functions;
+    auto dfs = [&](auto& self, Function* f) -> void {
+        used_functions.insert(f);
+
+        for (BasicBlock& bb : *f) {
+            for (Instruction& i : bb) {
+                if (CallInst* ci = dyn_cast<CallInst>(&i)) {
+                    Function* to = ci->getCalledFunction();
+                    if (!used_functions.count(to)) {
+                        self(self, to);
+                    }
+                }
+            }
+        }
+    };
+    dfs(dfs, task);
+
+    return used_functions;
+}
+
 namespace {
 
 vector<Function*> get_tasks(Module& M);
@@ -19,21 +43,39 @@ struct alpaca_pass : public ModulePass {
     alpaca_pass() : ModulePass(ID) {}
 
     bool runOnModule(Module& m) {
-        // All task-shared variables
+        // Get all task-shared variables
         vector<GlobalVariable*> ts_all = find_all_ts(m);
 
-        // Task-shared variables that have a WAR dependency in at least one task
-        unordered_set<GlobalVariable*> ts_war;
+        vector<Function*> tasks = get_tasks(m);
+
+        // For each task, find all reachable functions
+        unordered_map<Function*, unordered_set<Function*>> used_functions;
+        for (Function* task : tasks) {
+            used_functions[task] = get_used_functions(task);
+        }
+
+        // For each task, find all task-shared variables that have a WAR dependency
         unordered_map<Function*, vector<GlobalVariable*>> war_in_task;
-        for (Function* f : get_tasks(m)) {
-            war_in_task[f] = find_war(*f, ts_all);
-            ts_war.insert(begin(war_in_task[f]), end(war_in_task[f]));
+        for (Function* task : tasks) {
+            war_in_task[task] = find_war(*task, ts_all, used_functions);
+        }
+
+        // Get all task-shared variables that have a WAR dependency in at least one task
+        unordered_set<GlobalVariable*> ts_war;
+        for (auto& pr : war_in_task) {
+            ts_war.insert(begin(pr.second), end(pr.second));
         }
 
         // Create privatized copies
-        unordered_map<GlobalVariable*, GlobalVariable*> privatized;
+        unordered_map<GlobalVariable*, GlobalVariable*> private_copy;
         for (GlobalVariable* gv : ts_war) {
-            privatized[gv] = new GlobalVariable(gv->getType(), gv->isConstant(), gv->getLinkage(), gv->getInitializer(), gv->getName() + "_priv", gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+            private_copy[gv] = new GlobalVariable(m, gv->getValueType(), gv->isConstant(), gv->getLinkage(), gv->getInitializer(), gv->getName() + "_priv", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+        }
+
+        unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
+        for (Function* task : tasks) {
+            unordered_set<GlobalVariable*> need_to_privatize(begin(war_in_task[task]), end(war_in_task[task]));
+            privatize(task, need_to_privatize, private_copy, privatized, used_functions[task]);
         }
 
         return false;

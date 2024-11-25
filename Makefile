@@ -12,7 +12,7 @@ TEST_DIR = tests
 all: $(BIN_DIR)/emulator $(BIN_DIR)/simple.out
 
 # Compile LLVM pass
-$(BIN_DIR)/alpaca_pass.so: $(LLVM_DIR)/alpaca_pass.cpp $(LLVM_DIR)/find_war.cpp
+$(BIN_DIR)/alpaca_pass.so: $(LLVM_DIR)/alpaca_pass.cpp $(LLVM_DIR)/find_war.cpp $(LLVM_DIR)/privatize.cpp
 	$(CXX) -Iinclude -shared -fPIC -rdynamic $(shell llvm-config --cxxflags) -g -O0 -o $@ $^
 
 # Compile Emulator
