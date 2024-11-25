@@ -1,7 +1,9 @@
 #include "llvm/find_war.h"
 #include "llvm/privatize.h"
 
+#include <llvm/IR/Attributes.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
@@ -72,10 +74,17 @@ struct alpaca_pass : public ModulePass {
             private_copy[gv] = new GlobalVariable(m, gv->getValueType(), gv->isConstant(), gv->getLinkage(), gv->getInitializer(), gv->getName() + "_priv", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
         }
 
+        LLVMContext& context = m.getContext();
+        FunctionType* pre_commit_type = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(context), PointerType::getUnqual(context), Type::getInt32Ty(context)}, false);
+        Function* pre_commit = Function::Create(pre_commit_type, Function::ExternalLinkage, "pre_commit", &m);
+        pre_commit->addAttributeAtIndex(1, Attribute::get(context, Attribute::NoUndef));
+        pre_commit->addAttributeAtIndex(2, Attribute::get(context, Attribute::NoUndef));
+        pre_commit->addAttributeAtIndex(3, Attribute::get(context, Attribute::NoUndef));
+
         unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
         for (Function* task : tasks) {
             unordered_set<GlobalVariable*> need_to_privatize(begin(war_in_task[task]), end(war_in_task[task]));
-            privatize(task, need_to_privatize, private_copy, privatized, used_functions[task]);
+            privatize(task, need_to_privatize, private_copy, privatized, used_functions[task], pre_commit);
         }
 
         return false;
