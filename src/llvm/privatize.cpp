@@ -6,7 +6,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 
-void privatize(Function* task, unordered_set<GlobalVariable*>& need_to_privatize, unordered_map<GlobalVariable*, GlobalVariable*>& private_copy, unordered_map<Function*, unordered_set<GlobalVariable*>>& privatized, unordered_set<Function*>& used_functions, Function* pre_commit) {
+void privatize(Function* task, unordered_set<GlobalVariable*>& need_to_privatize, unordered_map<GlobalVariable*, GlobalVariable*>& private_copy, unordered_map<Function*, unordered_set<GlobalVariable*>>& privatized, unordered_set<Function*>& used_functions) {
     for (Function* f : used_functions) {
         for (GlobalVariable* ts : need_to_privatize) {
             if (privatized[f].count(ts)) {
@@ -29,7 +29,9 @@ void privatize(Function* task, unordered_set<GlobalVariable*>& need_to_privatize
             privatized[f].insert(ts);
         }
     }
+}
 
+void insert_precommit(Function* task, unordered_set<GlobalVariable*>& need_to_privatize, unordered_map<GlobalVariable*, GlobalVariable*>& private_copy, unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>>& in, Function* pre_commit) {
     BasicBlock& bb_first = task->front();
     Instruction* first = &bb_first.front();
     for (GlobalVariable* gv : need_to_privatize) {
@@ -37,12 +39,12 @@ void privatize(Function* task, unordered_set<GlobalVariable*>& need_to_privatize
         new StoreInst(old_value, private_copy[gv], first);
     }
 
-    Instruction* store_transition_to;
+    vector<Instruction*> transition_insts;
     for (BasicBlock& bb : *task) {
         for (Instruction& i : bb) {
             if (StoreInst* si = dyn_cast<StoreInst>(&i)) {
                 if (si->getOperand(1)->getName() == "transition_to_arg") {
-                    store_transition_to = &i;
+                    transition_insts.push_back(si);
                 }
             }
         }
@@ -51,7 +53,11 @@ void privatize(Function* task, unordered_set<GlobalVariable*>& need_to_privatize
     const DataLayout& dl = task->getParent()->getDataLayout();
     LLVMContext& context = task->getContext();
     for (GlobalVariable* ts : need_to_privatize) {
-        ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(ts->getValueType()));
-        CallInst::Create(pre_commit, makeArrayRef(vector<Value*>{ts, private_copy[ts], size}), "", store_transition_to);
+        for (Instruction* transition_to : transition_insts) {
+            if (in[ts][transition_to][2]) {
+                ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(ts->getValueType()));
+                CallInst::Create(pre_commit, makeArrayRef(vector<Value*>{ts, private_copy[ts], size}), "", transition_to);
+            }
+        }
     }
 }
