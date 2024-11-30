@@ -4,6 +4,7 @@
 #include <llvm/IR/Attributes.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
@@ -25,7 +26,7 @@ unordered_set<Function*> get_used_functions(Function* task) {
             for (Instruction& i : bb) {
                 if (CallInst* ci = dyn_cast<CallInst>(&i)) {
                     Function* to = ci->getCalledFunction();
-                    if (!used_functions.count(to)) {
+                    if (to->getName() != "transition_to" && !used_functions.count(to)) {
                         self(self, to);
                     }
                 }
@@ -57,15 +58,19 @@ struct alpaca_pass : public ModulePass {
         }
 
         // For each task, find all task-shared variables that have a WAR dependency
-        unordered_map<Function*, vector<GlobalVariable*>> war_in_task;
+        unordered_map<Function*, unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>>> war_in_task;
         for (Function* task : tasks) {
             war_in_task[task] = find_war(*task, ts_all, used_functions);
         }
 
         // Get all task-shared variables that have a WAR dependency in at least one task
         unordered_set<GlobalVariable*> ts_war;
-        for (auto& pr : war_in_task) {
-            ts_war.insert(begin(pr.second), end(pr.second));
+        for (Function* task : tasks) {
+            if (war_in_task.count(task)) {
+                for (auto& gv_map : war_in_task[task]) {
+                    ts_war.insert(gv_map.first);
+                }
+            }
         }
 
         // Create privatized copies
@@ -83,9 +88,21 @@ struct alpaca_pass : public ModulePass {
 
         unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
         for (Function* task : tasks) {
-            unordered_set<GlobalVariable*> need_to_privatize(begin(war_in_task[task]), end(war_in_task[task]));
-            privatize(task, need_to_privatize, private_copy, privatized, used_functions[task], pre_commit);
+            if (!war_in_task.count(task)) {
+                continue;
+            }
+
+            unordered_set<GlobalVariable*> need_to_privatize;
+            for (auto& gv_map : war_in_task[task]) {
+                need_to_privatize.insert(gv_map.first);
+            }
+
+            privatize(task, need_to_privatize, private_copy, privatized, used_functions[task]);
+
+            insert_precommit(task, need_to_privatize, private_copy, war_in_task[task], pre_commit);
         }
+
+        errs() << m << '\n';
 
         return false;
     }
