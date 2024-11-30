@@ -1,9 +1,7 @@
 #include "llvm/find_war.h"
 
-#include <llvm/ADT/BitVector.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CFG.h>
-#include <llvm/IR/Instructions.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -19,39 +17,18 @@ vector<GlobalVariable*> find_all_ts(Module& m) {
     return ts;
 }
 
-vector<BasicBlock*> get_reverse_postorder(Function& f) {
-    vector<BasicBlock*> order;
-    unordered_set<BasicBlock*> visited;
-    auto dfs = [&](auto& self, BasicBlock* bb) -> void {
-        visited.insert(bb);
-
-        for (BasicBlock* to : successors(bb)) {
-            if (!visited.count(to)) {
-                self(self, to);
-            }
-        }
-
-        order.push_back(bb);
-    };
-    dfs(dfs, &f.front());
-
-    reverse(begin(order), end(order));
-
-    return order;
-}
-
-bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unordered_set<Function*>>& adj_f) {
+pair<bool, unordered_map<Instruction*, BitVector>> is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unordered_set<Function*>>& adj_f) {
     unordered_map<Function*, BitVector> in_f, out_f;
     unordered_map<BasicBlock*, BitVector> in_bb, out_bb;
     unordered_map<Instruction*, BitVector> in_i, out_i;
 
     for (auto& pr : adj_f) {
         Function* f = pr.first;
-        in_f[f] = out_f[f] = BitVector(2);
+        in_f[f] = out_f[f] = BitVector(3);
         for (BasicBlock& bb : *f) {
-            in_bb[&bb] = out_bb[&bb] = BitVector(2);
+            in_bb[&bb] = out_bb[&bb] = BitVector(3);
             for (Instruction& i : bb) {
-                in_i[&i] = out_i[&i] = BitVector(2);
+                in_i[&i] = out_i[&i] = BitVector(3);
             }
         }
     }
@@ -59,6 +36,7 @@ bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unor
     unordered_set<Function*> queue_f;
     in_f[&sf][0] = 1;
     queue_f.insert(&sf);
+    bool found = false;
     while (!empty(queue_f)) {
         Function* f = *begin(queue_f);
         queue_f.erase(begin(queue_f));
@@ -68,6 +46,7 @@ bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unor
             out_f[f] = in_f[f];
         } else {
             in_bb[&f->front()] = in_f[f];
+            // Initialize queue with all blocks because the ouput of a function this functions calls may have changed
             unordered_set<BasicBlock*> queue_bb;
             for (BasicBlock& bb : *f) {
                 queue_bb.insert(&bb);
@@ -95,27 +74,22 @@ bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unor
                         } else {
                             out_i[i] = in_i[i];
                             if (LoadInst* li = dyn_cast<LoadInst>(i)) {
-                                for (Value* v : i->operands()) {
-                                    if (GlobalVariable* gv = dyn_cast<GlobalVariable>(v)) {
-                                        if (gv == nv_v) {
-                                            if (out_i[i][0]) {
-                                                out_i[i][1] = 1;
-                                                out_i[i][0] = 0;
-                                            }
+                                if (GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0))) {
+                                    if (gv == nv_v) {
+                                        if (out_i[i][0]) {
+                                            out_i[i][1] = 1;
+                                            out_i[i][0] = 0;
                                         }
                                     }
                                 }
                             } else if (StoreInst* si = dyn_cast<StoreInst>(i)) {
-                                for (Value* v : i->operands()) {
-                                    if (GlobalVariable* gv = dyn_cast<GlobalVariable>(v)) {
-                                        if (gv == nv_v) {
-                                            if (out_i[i][0]) {
-                                                out_i[i][0] = 0;
-                                            }
-                                            if (out_i[i][1]) {
-                                                return true;
-                                            }
+                                if (GlobalVariable* gv = dyn_cast<GlobalVariable>(si->getOperand(1))) {
+                                    if (gv == nv_v) {
+                                        if (out_i[i][1]) {
+                                            out_i[i][2] = 1;
+                                            found = true;
                                         }
+                                        out_i[i][0] = out_i[i][1] = 0;
                                     }
                                 }
                             }
@@ -125,15 +99,18 @@ bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unor
                             Instruction* nxt = &(*next(ii));
                             in_i[nxt] = out_i[i];
                         }
-
-                        out_bb[bb] = out_i[&bb->back()];
                     }
+
+                    out_bb[bb] = out_i[&bb->back()];
                 }
 
                 if (out_bb[bb] != out_bb_old) {
                     for (BasicBlock* to : successors(bb)) {
+                        BitVector in_to_old = in_bb[to];
                         in_bb[to] |= out_bb[bb];
-                        queue_bb.insert(to);
+                        if (in_bb[to] != in_to_old) {
+                            queue_bb.insert(to);
+                        }
                     }
                 }
             }
@@ -148,10 +125,13 @@ bool is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unor
         }
     }
 
-    return false;
+    if (found) {
+        return {true, in_i};
+    }
+    return {false, {}};
 }
 
-vector<GlobalVariable*> find_war(Function& task, vector<GlobalVariable*>& ts_all, unordered_map<Function*, unordered_set<Function*>>& used_functions) {
+unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> find_war(Function& task, vector<GlobalVariable*>& ts_all, unordered_map<Function*, unordered_set<Function*>>& used_functions) {
     unordered_map<Function*, unordered_set<Function*>> adj_f;
     unordered_set<Function*> visited;
     auto dfs = [&](auto& self, Function* f) -> void {
@@ -174,10 +154,11 @@ vector<GlobalVariable*> find_war(Function& task, vector<GlobalVariable*>& ts_all
     adj_f[&task] = {};
     dfs(dfs, &task);
 
-    vector<GlobalVariable*> war;
+    unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> war;
     for (GlobalVariable* v : ts_all) {
-        if (is_ts_war(task, v, adj_f)) {
-            war.push_back(v);
+        auto in_maybe = is_ts_war(task, v, adj_f);
+        if (in_maybe.first) {
+            war[v] = in_maybe.second;
         }
     }
 
