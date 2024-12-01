@@ -61,7 +61,7 @@ void on_power_off(__attribute__((unused)) int sig) {
     printf("Power off simulated: CPU time run = %ld.%09ld seconds\n", ts.tv_sec,
            ts.tv_nsec);
     save_memory();
-    exit(0);
+    exit(2);
 }
 
 // Set up a timer for power-off simulation
