@@ -40,6 +40,10 @@ void simulate_power_loss(const char *program) {
                 exit(1);
             }
 
+	    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+                break;
+            }
+
             // Restart the application
             child_pid = fork();
             if (child_pid == 0) {
