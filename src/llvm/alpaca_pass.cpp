@@ -164,7 +164,12 @@ struct alpaca_pass : public ModulePass {
 
         unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
         for (Function* task : tasks) {
-            privatize_scalar(task, need_to_privatize[task], priv, privatized, reachable_functions[task], in[task], pre_commit);
+            for (GlobalVariable* nv : need_to_privatize[task]) {
+                if (isa<ArrayType>(nv->getValueType())) {
+                } else {
+                    privatize_scalar(task, nv, priv[nv], privatized, reachable_functions[task], in[task][nv], pre_commit);
+                }
+            }
         }
 
         errs() << m << '\n';

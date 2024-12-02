@@ -9,4 +9,4 @@
 using namespace llvm;
 using namespace std;
 
-void privatize_scalar(Function*, unordered_set<GlobalVariable*>&, unordered_map<GlobalVariable*, GlobalVariable*>&, unordered_map<Function*, unordered_set<GlobalVariable*>>&, unordered_set<Function*>&, unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>>&, Function*);
+void privatize_scalar(Function*, GlobalVariable*, GlobalVariable*, unordered_map<Function*, unordered_set<GlobalVariable*>>&, unordered_set<Function*>&, unordered_map<Instruction*, BitVector>&, Function*);
