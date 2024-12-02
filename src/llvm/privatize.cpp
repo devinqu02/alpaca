@@ -31,7 +31,7 @@ void privatize(Function* task, unordered_set<GlobalVariable*>& need_to_privatize
     }
 }
 
-void insert_precommit(Function* task, unordered_set<GlobalVariable*>& need_to_privatize, unordered_map<GlobalVariable*, GlobalVariable*>& private_copy, unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>>& in, Function* pre_commit) {
+void insert_precommit(Function* task, unordered_set<GlobalVariable*>& need_to_privatize, unordered_map<GlobalVariable*, GlobalVariable*>& private_copy, Function* pre_commit) {
     BasicBlock& bb_first = task->front();
     Instruction* first = &bb_first.front();
     for (GlobalVariable* gv : need_to_privatize) {
@@ -52,12 +52,10 @@ void insert_precommit(Function* task, unordered_set<GlobalVariable*>& need_to_pr
 
     const DataLayout& dl = task->getParent()->getDataLayout();
     LLVMContext& context = task->getContext();
-    for (GlobalVariable* ts : need_to_privatize) {
+    for (GlobalVariable* gv : need_to_privatize) {
         for (Instruction* transition_to : transition_insts) {
-            if (in[ts][transition_to][2]) {
-                ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(ts->getValueType()));
-                CallInst::Create(pre_commit, makeArrayRef(vector<Value*>{ts, private_copy[ts], size}), "", transition_to);
-            }
+            ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(gv->getValueType()));
+            CallInst::Create(pre_commit, makeArrayRef(vector<Value*>{gv, private_copy[gv], size}), "", transition_to);
         }
     }
 }

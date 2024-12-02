@@ -6,36 +6,37 @@
 #include <unordered_map>
 #include <unordered_set>
 
-vector<GlobalVariable*> find_all_ts(Module& m) {
-    vector<GlobalVariable*> ts;
+unordered_set<GlobalVariable*> find_all_scalars(Module& m) {
+    unordered_set<GlobalVariable*> scalars;
     for (GlobalVariable& gv : m.globals()) {
+        // TODO: check if it's a scalar
         if (gv.getSection() == "nv_data") {
-            ts.push_back(&gv);
+            scalars.insert(&gv);
         }
     }
 
-    return ts;
+    return scalars;
 }
 
-pair<bool, unordered_map<Instruction*, BitVector>> is_ts_war(Function& sf, GlobalVariable* nv_v, unordered_map<Function*, unordered_set<Function*>>& adj_f) {
+bool is_war_scalar(Function& task, GlobalVariable* scalar, unordered_map<Function*, unordered_set<Function*>>& adj) {
     unordered_map<Function*, BitVector> in_f, out_f;
     unordered_map<BasicBlock*, BitVector> in_bb, out_bb;
     unordered_map<Instruction*, BitVector> in_i, out_i;
 
-    for (auto& pr : adj_f) {
+    for (auto& pr : adj) {
         Function* f = pr.first;
-        in_f[f] = out_f[f] = BitVector(3);
+        in_f[f] = out_f[f] = BitVector(2);
         for (BasicBlock& bb : *f) {
-            in_bb[&bb] = out_bb[&bb] = BitVector(3);
+            in_bb[&bb] = out_bb[&bb] = BitVector(2);
             for (Instruction& i : bb) {
-                in_i[&i] = out_i[&i] = BitVector(3);
+                in_i[&i] = out_i[&i] = BitVector(2);
             }
         }
     }
 
     unordered_set<Function*> queue_f;
-    in_f[&sf][0] = 1;
-    queue_f.insert(&sf);
+    in_f[&task][0] = 1;
+    queue_f.insert(&task);
     bool found = false;
     while (!empty(queue_f)) {
         Function* f = *begin(queue_f);
@@ -46,7 +47,7 @@ pair<bool, unordered_map<Instruction*, BitVector>> is_ts_war(Function& sf, Globa
             out_f[f] = in_f[f];
         } else {
             in_bb[&f->front()] = in_f[f];
-            // Initialize queue with all blocks because the ouput of a function this functions calls may have changed
+            // Initialize queue with all blocks because this function may call another function whose output changed
             unordered_set<BasicBlock*> queue_bb;
             for (BasicBlock& bb : *f) {
                 queue_bb.insert(&bb);
@@ -75,7 +76,7 @@ pair<bool, unordered_map<Instruction*, BitVector>> is_ts_war(Function& sf, Globa
                             out_i[i] = in_i[i];
                             if (LoadInst* li = dyn_cast<LoadInst>(i)) {
                                 if (GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0))) {
-                                    if (gv == nv_v) {
+                                    if (gv == scalar) {
                                         if (out_i[i][0]) {
                                             out_i[i][1] = 1;
                                             out_i[i][0] = 0;
@@ -84,10 +85,9 @@ pair<bool, unordered_map<Instruction*, BitVector>> is_ts_war(Function& sf, Globa
                                 }
                             } else if (StoreInst* si = dyn_cast<StoreInst>(i)) {
                                 if (GlobalVariable* gv = dyn_cast<GlobalVariable>(si->getOperand(1))) {
-                                    if (gv == nv_v) {
+                                    if (gv == scalar) {
                                         if (out_i[i][1]) {
-                                            out_i[i][2] = 1;
-                                            found = true;
+                                            return true;
                                         }
                                         out_i[i][0] = out_i[i][1] = 0;
                                     }
@@ -119,20 +119,17 @@ pair<bool, unordered_map<Instruction*, BitVector>> is_ts_war(Function& sf, Globa
         }
 
         if (out_f[f] != out_f_old) {
-            for (Function* to : adj_f[f]) {
+            for (Function* to : adj[f]) {
                 queue_f.insert(to);
             }
         }
     }
 
-    if (found) {
-        return {true, in_i};
-    }
-    return {false, {}};
+    return false;
 }
 
-unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> find_war(Function& task, vector<GlobalVariable*>& ts_all, unordered_map<Function*, unordered_set<Function*>>& used_functions) {
-    unordered_map<Function*, unordered_set<Function*>> adj_f;
+unordered_set<GlobalVariable*> find_war_scalars(Function& task, unordered_set<GlobalVariable*>& scalars, unordered_map<Function*, unordered_set<Function*>>& reachable_functions) {
+    unordered_map<Function*, unordered_set<Function*>> adj;
     unordered_set<Function*> visited;
     auto dfs = [&](auto& self, Function* f) -> void {
         visited.insert(f);
@@ -140,9 +137,9 @@ unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> find_war(
             for (Instruction& i : bb) {
                 if (CallInst* ci = dyn_cast<CallInst>(&i)) {
                     Function* to = ci->getCalledFunction();
-                    if (used_functions[&task].count(to)) {
-                        adj_f[f].insert(to);
-                        adj_f[to].insert(f);
+                    if (reachable_functions[&task].count(to)) {
+                        adj[f].insert(to);
+                        adj[to].insert(f);
                         if (!visited.count(to)) {
                             self(self, to);
                         }
@@ -151,16 +148,15 @@ unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> find_war(
             }
         }
     };
-    adj_f[&task] = {};
+    adj[&task] = {};
     dfs(dfs, &task);
 
-    unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> war;
-    for (GlobalVariable* v : ts_all) {
-        auto in_maybe = is_ts_war(task, v, adj_f);
-        if (in_maybe.first) {
-            war[v] = in_maybe.second;
+    unordered_set<GlobalVariable*> war_scalars;
+    for (GlobalVariable* gv : scalars) {
+        if (is_war_scalar(task, gv, adj)) {
+            war_scalars.insert(gv);
         }
     }
 
-    return war;
+    return war_scalars;
 }

@@ -6,10 +6,9 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
 
 using namespace std;
 using namespace llvm;
 
-vector<GlobalVariable*> find_all_ts(Module&);
-unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> find_war(Function&, vector<GlobalVariable*>&, unordered_map<Function*, unordered_set<Function*>>&);
+unordered_set<GlobalVariable*> find_all_scalars(Module&);
+unordered_set<GlobalVariable*> find_war_scalars(Function&, unordered_set<GlobalVariable*>&, unordered_map<Function*, unordered_set<Function*>>&);

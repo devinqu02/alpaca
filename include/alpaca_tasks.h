@@ -1,7 +1,7 @@
-
 #ifndef _ALPACA_TASKS_H
 #define _ALPACA_TASKS_H
 
+#include <stdint.h>
 #include <stdbool.h>
 
 #define TRANSITION_TO(func_name)   \
@@ -28,5 +28,7 @@ typedef struct program_pos {
 } program_pos_t;
 
 extern NV_GLOBAL program_pos_t *curr_program_pos;
+
+extern NV_GLOBAL volatile uint16_t curr_version;
 
 #endif  // _ALPACA_TASKS_H
