@@ -1,3 +1,4 @@
+#include "llvm/pass_helper.h"
 #include "llvm/privatize.h"
 
 #include <llvm/ADT/ArrayRef.h>
@@ -56,5 +57,46 @@ void privatize_scalar(Function* task, GlobalVariable* nv, GlobalVariable* priv, 
 
         ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(nv->getValueType()));
         CallInst::Create(pre_commit, makeArrayRef(vector<Value*>{nv, priv, size}), "", transition_to);
+    }
+}
+
+void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, GlobalVariable* vbm, unordered_set<Instruction*>& privatized, unordered_set<Function*>& used_functions, unordered_map<Instruction*, BitVector>& in, Function* handle_load, Function* handle_store) {
+    const DataLayout& dl = task->getParent()->getDataLayout();
+    LLVMContext& context = task->getContext();
+    ArrayType* at = dyn_cast<ArrayType>(nv->getValueType());
+    ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(at->getArrayElementType()));
+
+    for (Function* f : used_functions) {
+        for (BasicBlock& bb : *f) {
+            for (Instruction& i : bb) {
+                if (privatized.count(&i)) {
+                    continue;
+                }
+
+                Constant* index;
+                if (is_load(&i, nv)) {
+                    LoadInst* li = dyn_cast<LoadInst>(&i);
+                    if (nv == li->getOperand(0)) {
+                        index = ConstantInt::get(Type::getInt32Ty(context), 0);
+                    } else {
+                        ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0));
+                        index = ConstantInt::get(Type::getInt32Ty(context), ce->getOperand(2)->getUniqueInteger().trunc(32));
+                    }
+
+                    CallInst::Create(handle_load, makeArrayRef(vector<Value*>{nv, priv, vbm, index, size}), "", li);
+                    privatized.insert(li);
+                } else if (is_store(&i, nv)) {
+                    StoreInst* si = dyn_cast<StoreInst>(&i);
+                    if (nv == si->getOperand(1)) {
+                        index = ConstantInt::get(Type::getInt32Ty(context), 0);
+                    } else {
+                        ConstantExpr* ce = dyn_cast<ConstantExpr>(si->getOperand(1));
+                        index = ConstantInt::get(Type::getInt32Ty(context), ce->getOperand(2)->getUniqueInteger().trunc(32));
+                    }
+                    CallInst::Create(handle_store, makeArrayRef(vector<Value*>{nv, priv, vbm, index, size}), "", si);
+                    privatized.insert(si);
+                }
+            }
+        }
     }
 }

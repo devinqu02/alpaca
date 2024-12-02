@@ -1,4 +1,5 @@
 #include "llvm/find_war.h"
+#include "llvm/pass_helper.h"
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/BasicBlock.h>
@@ -80,54 +81,23 @@ pair<bool, unordered_map<Instruction*, BitVector>> is_war(Function& task, Global
                             out_i[i] = out_f[to];
                         } else {
                             out_i[i] = in_i[i];
-                            bool accesses_nv = false;
-                            if (LoadInst* li = dyn_cast<LoadInst>(i)) {
-                                if (GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0))) {
-                                    if (gv == nv) {
-                                        accesses_nv = true;
-                                    }
+                            if (is_load(i, nv)) {
+                                if (out_i[i][0]) {
+                                    out_i[i][1] = 1;
                                 }
-                                if (ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0))) {
-                                    if (ce->getOpcode() == Instruction::GetElementPtr) {
-                                        if (ce->getOperand(0) == nv) {
-                                            accesses_nv = true;
-                                        }
-                                    }
+                                if (out_i[i][2]) {
+                                    out_i[i][3] = 1;
                                 }
-
-                                if (accesses_nv) {
-                                    if (out_i[i][0]) {
-                                        out_i[i][1] = 1;
-                                    }
-                                    if (out_i[i][2]) {
-                                        out_i[i][3] = 1;
-                                    }
-                                    out_i[i][0] = out_i[i][2] = 0;
+                                out_i[i][0] = out_i[i][2] = 0;
+                            } else if (is_store(i, nv)) {
+                                if (out_i[i][0]) {
+                                    out_i[i][2] = 1;
                                 }
-                            } else if (StoreInst* si = dyn_cast<StoreInst>(i)) {
-                                if (GlobalVariable* gv = dyn_cast<GlobalVariable>(si->getOperand(1))) {
-                                    if (gv == nv) {
-                                        accesses_nv = true;
-                                    }
+                                if (out_i[i][1]) {
+                                    found = true;
+                                    out_i[i][3] = 1;
                                 }
-                                if (ConstantExpr* ce = dyn_cast<ConstantExpr>(si->getOperand(1))) {
-                                    if (ce->getOpcode() == Instruction::GetElementPtr) {
-                                        if (ce->getOperand(0) == nv) {
-                                            accesses_nv = true;
-                                        }
-                                    }
-                                }
-
-                                if (accesses_nv) {
-                                    if (out_i[i][0]) {
-                                        out_i[i][2] = 1;
-                                    }
-                                    if (out_i[i][1]) {
-                                        found = true;
-                                        out_i[i][3] = 1;
-                                    }
-                                    out_i[i][0] = out_i[i][1] = 0;
-                                }
+                                out_i[i][0] = out_i[i][1] = 0;
                             }
                         }
 

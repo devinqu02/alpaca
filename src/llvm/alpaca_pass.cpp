@@ -156,23 +156,34 @@ struct alpaca_pass : public ModulePass {
             }
         }
 
+        // Declaration for pre_commit()
         FunctionType* pre_commit_type = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(context), PointerType::getUnqual(context), Type::getInt32Ty(context)}, false);
         Function* pre_commit = Function::Create(pre_commit_type, Function::ExternalLinkage, "pre_commit", &m);
-        pre_commit->addAttributeAtIndex(1, Attribute::get(context, Attribute::NoUndef));
-        pre_commit->addAttributeAtIndex(2, Attribute::get(context, Attribute::NoUndef));
-        pre_commit->addAttributeAtIndex(3, Attribute::get(context, Attribute::NoUndef));
+        for (int i = 1; i <= 3; ++i) {
+            pre_commit->addAttributeAtIndex(i, Attribute::get(context, Attribute::NoUndef));
+        }
+
+        FunctionType* handle_array_type = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(context), PointerType::getUnqual(context), PointerType::getUnqual(Type::getInt16Ty(context)), Type::getInt32Ty(context), Type::getInt32Ty(context)}, false);
+        Function* handle_load = Function::Create(handle_array_type, Function::ExternalLinkage, "handle_load", &m);
+        Function* handle_store = Function::Create(handle_array_type, Function::ExternalLinkage, "handle_store", &m);
+        for (int i = 1; i <= 5; ++i) {
+            handle_load->addAttributeAtIndex(i, Attribute::get(context, Attribute::NoUndef));
+            handle_store->addAttributeAtIndex(i, Attribute::get(context, Attribute::NoUndef));
+        }
 
         unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
+        unordered_set<Instruction*> handled_instructions;
         for (Function* task : tasks) {
             for (GlobalVariable* nv : need_to_privatize[task]) {
                 if (isa<ArrayType>(nv->getValueType())) {
+                    privatize_array(task, nv, priv[nv], vbm[nv], handled_instructions, reachable_functions[task], in[task][nv], handle_load, handle_store);
                 } else {
                     privatize_scalar(task, nv, priv[nv], privatized, reachable_functions[task], in[task][nv], pre_commit);
                 }
             }
         }
 
-        errs() << m << '\n';
+        // errs() << m << '\n';
 
         return false;
     }
