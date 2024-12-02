@@ -4,6 +4,7 @@
 #include <llvm/IR/Attributes.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
@@ -16,7 +17,7 @@
 
 using namespace llvm;
 
-constexpr bool use_war_scalar_analysis = true;
+constexpr bool use_war_analysis = true;
 
 unordered_set<Function*> get_reachable_functions(Function* task) {
     unordered_set<Function*> reachable_functions;
@@ -46,8 +47,8 @@ struct alpaca_pass : public ModulePass {
     alpaca_pass() : ModulePass(ID) {}
 
     bool runOnModule(Module& m) {
-        // Get all non volatile scalars
-        unordered_set<GlobalVariable*> scalars = find_all_scalars(m);
+        // Get all non-volatile variables
+        unordered_set<GlobalVariable*> nv_set = find_all_nv(m);
 
         vector<Function*> tasks = get_tasks(m);
 
@@ -57,7 +58,7 @@ struct alpaca_pass : public ModulePass {
             reachable_functions[task] = get_reachable_functions(task);
         }
 
-        // For each function, find all tasks that reach it
+        // For each function, find all tasks that can reach it (the inverse of reachable_functions)
         unordered_map<Function*, vector<Function*>> calling_tasks;
         for (auto& task_map : reachable_functions) {
             for (Function* f : task_map.second) {
@@ -65,15 +66,24 @@ struct alpaca_pass : public ModulePass {
             }
         }
 
-        // For each function, find all scalars it uses
-        unordered_map<Function*, unordered_set<GlobalVariable*>> used_scalars;
+        // For each function, find all non-volatile variables it uses
+        unordered_map<Function*, unordered_set<GlobalVariable*>> used_nv;
         for (Function& f : m) {
             for (BasicBlock& bb : f) {
                 for (Instruction& i : bb) {
                     for (Value* v : i.operands()) {
                         if (GlobalVariable* gv = dyn_cast<GlobalVariable>(v)) {
-                            if (scalars.count(gv)) {
-                                used_scalars[&f].insert(gv);
+                            if (nv_set.count(gv)) {
+                                used_nv[&f].insert(gv);
+                            }
+                        }
+                        if (ConstantExpr* ce = dyn_cast<ConstantExpr>(v)) {
+                            if (ce->getOpcode() == Instruction::GetElementPtr) {
+                                if (GlobalVariable* gv = dyn_cast<GlobalVariable>(ce->getOperand(0))) {
+                                    if (nv_set.count(gv)) {
+                                        used_nv[&f].insert(gv);
+                                    }
+                                }
                             }
                         }
                     }
@@ -82,20 +92,20 @@ struct alpaca_pass : public ModulePass {
         }
 
         unordered_map<Function*, unordered_set<GlobalVariable*>> need_to_privatize;
-        // Get all non volatile scalars that have a WAR dependency in at least one task
-        unordered_set<GlobalVariable*> war_scalars;
-
-        if (use_war_scalar_analysis) {
-            // For each task, find all non volatile scalars that have a WAR dependency
+        // All non-volatile variables that have a WAR dependency in at least one task
+        unordered_set<GlobalVariable*> to_privatize;
+        unordered_map<Function*, unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>>> in;
+        if (use_war_analysis) {
+            // For each task, find all non-volatile variables that have a WAR dependency
             for (Function* task : tasks) {
-                need_to_privatize[task] = find_war_scalars(*task, scalars, reachable_functions);
+                auto war_res = find_war(*task, nv_set, reachable_functions);
+                need_to_privatize[task] = war_res.first;
+                in[task] = war_res.second;
+
+                to_privatize.insert(need_to_privatize[task].begin(), need_to_privatize[task].end());
             }
 
-            for (Function* task : tasks) {
-                war_scalars.insert(need_to_privatize[task].begin(), need_to_privatize[task].end());
-            }
-
-            for (GlobalVariable* gv : war_scalars) {
+            for (GlobalVariable* gv : to_privatize) {
                 queue<Function*> q;
                 for (Function* task : tasks) {
                     if (need_to_privatize[task].count(gv)) {
@@ -107,7 +117,7 @@ struct alpaca_pass : public ModulePass {
                     Function* task = q.front();
                     q.pop();
                     for (Function* f : reachable_functions[task]) {
-                        if (!used_scalars[f].count(gv)) {
+                        if (!used_nv[f].count(gv)) {
                             continue;
                         }
 
@@ -123,21 +133,29 @@ struct alpaca_pass : public ModulePass {
         } else {
             for (Function* task : tasks) {
                 for (Function* f : reachable_functions[task]) {
-                    for (GlobalVariable* gv : used_scalars[f]) {
+                    for (GlobalVariable* gv : used_nv[f]) {
                         need_to_privatize[task].insert(gv);
-                        war_scalars.insert(gv);
+                        to_privatize.insert(gv);
                     }
                 }
             }
         }
 
         // Create private copies
-        unordered_map<GlobalVariable*, GlobalVariable*> private_copy;
-        for (GlobalVariable* gv : war_scalars) {
-            private_copy[gv] = new GlobalVariable(m, gv->getValueType(), gv->isConstant(), gv->getLinkage(), gv->getInitializer(), gv->getName() + "_priv", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+        unordered_map<GlobalVariable*, GlobalVariable*> priv, vbm;
+        LLVMContext& context = m.getContext();
+        for (GlobalVariable* gv : to_privatize) {
+            priv[gv] = new GlobalVariable(m, gv->getValueType(), gv->isConstant(), gv->getLinkage(), gv->getInitializer(), gv->getName() + "_priv", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+            priv[gv]->copyAttributesFrom(gv);
+
+            if (ArrayType* at = dyn_cast<ArrayType>(gv->getValueType())) {
+                ArrayType* vbm_type = ArrayType::get(Type::getInt16Ty(context), at->getNumElements());
+                vbm[gv] = new GlobalVariable(m, vbm_type, gv->isConstant(), gv->getLinkage(), ConstantAggregateZero::get(vbm_type), gv->getName() + "_vbm", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+                vbm[gv]->copyAttributesFrom(gv);
+                vbm[gv]->setAlignment(Align(2));
+            }
         }
 
-        LLVMContext& context = m.getContext();
         FunctionType* pre_commit_type = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(context), PointerType::getUnqual(context), Type::getInt32Ty(context)}, false);
         Function* pre_commit = Function::Create(pre_commit_type, Function::ExternalLinkage, "pre_commit", &m);
         pre_commit->addAttributeAtIndex(1, Attribute::get(context, Attribute::NoUndef));
@@ -146,9 +164,7 @@ struct alpaca_pass : public ModulePass {
 
         unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
         for (Function* task : tasks) {
-            privatize(task, need_to_privatize[task], private_copy, privatized, reachable_functions[task]);
-
-            insert_precommit(task, need_to_privatize[task], private_copy, pre_commit);
+            privatize_scalar(task, need_to_privatize[task], priv, privatized, reachable_functions[task], in[task], pre_commit);
         }
 
         errs() << m << '\n';

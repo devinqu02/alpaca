@@ -1,35 +1,41 @@
 #include "llvm/find_war.h"
 
+#include <llvm/IR/Constants.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CFG.h>
 
 #include <unordered_map>
 #include <unordered_set>
 
-unordered_set<GlobalVariable*> find_all_scalars(Module& m) {
-    unordered_set<GlobalVariable*> scalars;
+unordered_set<GlobalVariable*> find_all_nv(Module& m) {
+    unordered_set<GlobalVariable*> nv_set;
     for (GlobalVariable& gv : m.globals()) {
-        // TODO: check if it's a scalar
         if (gv.getSection() == "nv_data") {
-            scalars.insert(&gv);
+            nv_set.insert(&gv);
         }
     }
 
-    return scalars;
+    return nv_set;
 }
 
-bool is_war_scalar(Function& task, GlobalVariable* scalar, unordered_map<Function*, unordered_set<Function*>>& adj) {
+pair<bool, unordered_map<Instruction*, BitVector>> is_war(Function& task, GlobalVariable* nv, unordered_map<Function*, unordered_set<Function*>>& adj) {
     unordered_map<Function*, BitVector> in_f, out_f;
     unordered_map<BasicBlock*, BitVector> in_bb, out_bb;
     unordered_map<Instruction*, BitVector> in_i, out_i;
 
+    /* Meaning of bits:
+     * 0 - ∃ path reaching this point such that the variable is never used
+     * 1 - ∃ path reaching this point such that the variable is only read
+     * 2 - ∃ path reaching this point such that the variable is only written
+     * 3 - ∃ path reaching this point such that the variable is both read and written to (can be any order)
+     */
     for (auto& pr : adj) {
         Function* f = pr.first;
-        in_f[f] = out_f[f] = BitVector(2);
+        in_f[f] = out_f[f] = BitVector(4);
         for (BasicBlock& bb : *f) {
-            in_bb[&bb] = out_bb[&bb] = BitVector(2);
+            in_bb[&bb] = out_bb[&bb] = BitVector(4);
             for (Instruction& i : bb) {
-                in_i[&i] = out_i[&i] = BitVector(2);
+                in_i[&i] = out_i[&i] = BitVector(4);
             }
         }
     }
@@ -74,23 +80,53 @@ bool is_war_scalar(Function& task, GlobalVariable* scalar, unordered_map<Functio
                             out_i[i] = out_f[to];
                         } else {
                             out_i[i] = in_i[i];
+                            bool accesses_nv = false;
                             if (LoadInst* li = dyn_cast<LoadInst>(i)) {
                                 if (GlobalVariable* gv = dyn_cast<GlobalVariable>(li->getOperand(0))) {
-                                    if (gv == scalar) {
-                                        if (out_i[i][0]) {
-                                            out_i[i][1] = 1;
-                                            out_i[i][0] = 0;
+                                    if (gv == nv) {
+                                        accesses_nv = true;
+                                    }
+                                }
+                                if (ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0))) {
+                                    if (ce->getOpcode() == Instruction::GetElementPtr) {
+                                        if (ce->getOperand(0) == nv) {
+                                            accesses_nv = true;
                                         }
                                     }
                                 }
+
+                                if (accesses_nv) {
+                                    if (out_i[i][0]) {
+                                        out_i[i][1] = 1;
+                                    }
+                                    if (out_i[i][2]) {
+                                        out_i[i][3] = 1;
+                                    }
+                                    out_i[i][0] = out_i[i][2] = 0;
+                                }
                             } else if (StoreInst* si = dyn_cast<StoreInst>(i)) {
                                 if (GlobalVariable* gv = dyn_cast<GlobalVariable>(si->getOperand(1))) {
-                                    if (gv == scalar) {
-                                        if (out_i[i][1]) {
-                                            return true;
-                                        }
-                                        out_i[i][0] = out_i[i][1] = 0;
+                                    if (gv == nv) {
+                                        accesses_nv = true;
                                     }
+                                }
+                                if (ConstantExpr* ce = dyn_cast<ConstantExpr>(si->getOperand(1))) {
+                                    if (ce->getOpcode() == Instruction::GetElementPtr) {
+                                        if (ce->getOperand(0) == nv) {
+                                            accesses_nv = true;
+                                        }
+                                    }
+                                }
+
+                                if (accesses_nv) {
+                                    if (out_i[i][0]) {
+                                        out_i[i][2] = 1;
+                                    }
+                                    if (out_i[i][1]) {
+                                        found = true;
+                                        out_i[i][3] = 1;
+                                    }
+                                    out_i[i][0] = out_i[i][1] = 0;
                                 }
                             }
                         }
@@ -125,10 +161,10 @@ bool is_war_scalar(Function& task, GlobalVariable* scalar, unordered_map<Functio
         }
     }
 
-    return false;
+    return {found, in_i};
 }
 
-unordered_set<GlobalVariable*> find_war_scalars(Function& task, unordered_set<GlobalVariable*>& scalars, unordered_map<Function*, unordered_set<Function*>>& reachable_functions) {
+pair<unordered_set<GlobalVariable*>, unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>>> find_war(Function& task, unordered_set<GlobalVariable*>& nv_set, unordered_map<Function*, unordered_set<Function*>>& reachable_functions) {
     unordered_map<Function*, unordered_set<Function*>> adj;
     unordered_set<Function*> visited;
     auto dfs = [&](auto& self, Function* f) -> void {
@@ -151,12 +187,15 @@ unordered_set<GlobalVariable*> find_war_scalars(Function& task, unordered_set<Gl
     adj[&task] = {};
     dfs(dfs, &task);
 
-    unordered_set<GlobalVariable*> war_scalars;
-    for (GlobalVariable* gv : scalars) {
-        if (is_war_scalar(task, gv, adj)) {
-            war_scalars.insert(gv);
+    unordered_set<GlobalVariable*> war;
+    unordered_map<GlobalVariable*, unordered_map<Instruction*, BitVector>> in;
+    for (GlobalVariable* gv : nv_set) {
+        auto war_res = is_war(task, gv, adj);
+        if (war_res.first) {
+            war.insert(gv);
         }
+        in[gv] = war_res.second;
     }
 
-    return war_scalars;
+    return {war, in};
 }

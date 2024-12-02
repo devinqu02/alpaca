@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -21,6 +22,8 @@ NV_GLOBAL unsigned list_size = 0;
 NV_GLOBAL void* commit_list_orig[20];  // TODO remove
 NV_GLOBAL void* commit_list_priv_buff[20];
 NV_GLOBAL unsigned commit_list_size[20];
+
+NV_GLOBAL volatile uint16_t curr_version = 0;
 
 // Add to commit list
 void pre_commit(void* orig, void* priv_buff, unsigned size) {
@@ -59,6 +62,8 @@ void transition_to(void) {
     // [Checkpoint]
     curr_program_pos->to_commit = false;
 
+    ++curr_version;
+
     JUMP_TO(curr_program_pos->next_task);
 }
 
@@ -66,6 +71,8 @@ void transition_to(void) {
 int main() {
     // Call initialization function
     initialization();
+
+    ++curr_version;
 
     if (curr_program_pos->to_commit) {
         commit_all();
