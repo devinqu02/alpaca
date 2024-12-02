@@ -42,6 +42,19 @@ void commit_all(void) {
     }
 }
 
+void handle_load(void* orig, void* priv_buff, uint16_t* vbm, int i, unsigned size) {
+    if (vbm[i] != curr_version) {
+        memcpy((char*)priv_buff + i * size, (char*)orig + i * size, size);
+    }
+}
+
+void handle_store(void* orig, void* priv_buff, uint16_t* vbm, int i, unsigned size) {
+    if (vbm[i] != curr_version) {
+        vbm[i] = curr_version;
+        pre_commit((char*)orig + i + size, (char*)priv_buff + i * size, size);
+    }
+}
+
 // Pass in an argument to transition_to without changing function signature of
 // transition_to
 void (*transition_to_arg)(void);
