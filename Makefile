@@ -22,7 +22,7 @@ benchmarks: $(BENCHMARK_BINARIES)
 	@echo "Benchmarks compiled successfully."
 
 # Compile LLVM pass
-$(BIN_DIR)/alpaca_pass.so: $(LLVM_DIR)/alpaca_pass.cpp $(LLVM_DIR)/find_war.cpp $(LLVM_DIR)/privatize.cpp
+$(BIN_DIR)/alpaca_pass.so: $(LLVM_DIR)/alpaca_pass.cpp $(LLVM_DIR)/find_war.cpp $(LLVM_DIR)/privatize.cpp $(LLVM_DIR)/pass_helper.cpp
 	$(CXX) -Iinclude -shared -fPIC -rdynamic $(LLVM_CXXFLAGS) -g -O0 -o $@ $^
 
 # Compile Emulator
