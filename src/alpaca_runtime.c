@@ -5,7 +5,7 @@
 #include "alpaca_tasks.h"
 
 // Task to transition to at the end of the program
-TASK(end) { return; }
+TASK(end) { printf("%d loads, %d stores\n", load_count, store_count); return; }
 
 // Program position to track the next task and commit status. Double buffered to
 // atomically update curr_program_pos
