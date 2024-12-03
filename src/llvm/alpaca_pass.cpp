@@ -183,7 +183,7 @@ struct alpaca_pass : public ModulePass {
             }
         }
 
-        return false;
+        return true;
     }
 };
 

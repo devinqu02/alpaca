@@ -48,7 +48,7 @@ struct stats_pass : public ModulePass {
             }
         }
 
-        return false;
+        return true;
     }
 };
 

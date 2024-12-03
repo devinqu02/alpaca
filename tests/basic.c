@@ -10,8 +10,6 @@ MAIN_TASK {
     a = c + 1;
     printf("%d %d %d %d\n", a, b, c, d);
 
-    printf("%d %d\n", load_count, store_count);
-
     TRANSITION_TO(end);
 }
 

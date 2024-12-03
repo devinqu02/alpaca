@@ -32,8 +32,8 @@ typedef struct program_pos {
 
 extern NV_GLOBAL program_pos_t *curr_program_pos;
 
-extern NV_GLOBAL volatile uint16_t curr_version;
+NV_GLOBAL extern volatile uint16_t curr_version;
 
-extern NV_GLOBAL volatile int load_count, store_count;
+NV_GLOBAL extern volatile int load_count, store_count;
 
 #endif  // _ALPACA_TASKS_H
