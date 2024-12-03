@@ -5,7 +5,15 @@
 #include "alpaca_tasks.h"
 
 // Task to transition to at the end of the program
-TASK(end) { printf("%d loads, %d stores\n", load_count, store_count); return; }
+#ifdef STATS
+NV_GLOBAL volatile int load_count = 0, store_count = 0;
+TASK(end) {
+    printf("%d loads, %d stores\n", load_count, store_count);
+    return;
+}
+#else
+TASK(end) { return; }
+#endif
 
 // Program position to track the next task and commit status. Double buffered to
 // atomically update curr_program_pos
@@ -25,8 +33,6 @@ NV_GLOBAL unsigned commit_list_size[20];
 
 NV_GLOBAL volatile uint16_t curr_version = 0;
 
-NV_GLOBAL volatile int load_count = 0, store_count = 0;
-
 // Add to commit list
 void pre_commit(void* orig, void* priv_buff, unsigned size) {
     commit_list_orig[list_size] = orig;
@@ -44,13 +50,15 @@ void commit_all(void) {
     }
 }
 
-void handle_load(void* orig, void* priv_buff, uint16_t* vbm, int i, unsigned size) {
+void handle_load(void* orig, void* priv_buff, uint16_t* vbm, int i,
+                 unsigned size) {
     if (vbm[i] != curr_version) {
         memcpy((char*)priv_buff + i * size, (char*)orig + i * size, size);
     }
 }
 
-void handle_store(void* orig, void* priv_buff, uint16_t* vbm, int i, unsigned size) {
+void handle_store(void* orig, void* priv_buff, uint16_t* vbm, int i,
+                  unsigned size) {
     if (vbm[i] != curr_version) {
         vbm[i] = curr_version;
         pre_commit((char*)orig + i + size, (char*)priv_buff + i * size, size);

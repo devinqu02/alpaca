@@ -24,5 +24,6 @@
 #define BLOCK_PRINTF_BEGIN() do { /* No operation needed for BEGIN */ } while (0)
 #define BLOCK_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define BLOCK_PRINTF_END() do { /* No operation needed for END */ } while (0)
+#define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 
 typedef void (task_t)(void);
