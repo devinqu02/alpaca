@@ -78,9 +78,11 @@ void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, G
                     LoadInst* li = dyn_cast<LoadInst>(&i);
                     if (nv == li->getOperand(0)) {
                         index = ConstantInt::get(Type::getInt32Ty(context), 0);
-                    } else {
-                        ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0));
+                    } else if (ConstantExpr* ce = dyn_cast<ConstantExpr>(li->getOperand(0))) {
                         index = ConstantInt::get(Type::getInt32Ty(context), ce->getOperand(2)->getUniqueInteger().trunc(32));
+                    } else {
+                        GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(li->getOperand(0));
+                        index = ConstantInt::get(Type::getInt32Ty(context), dyn_cast<ConstantInt>(gep->getOperand(1))->getUniqueInteger().trunc(32));
                     }
 
                     CallInst::Create(handle_load, makeArrayRef(vector<Value*>{nv, priv, vbm, index, size}), "", li);
@@ -89,10 +91,13 @@ void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, G
                     StoreInst* si = dyn_cast<StoreInst>(&i);
                     if (nv == si->getOperand(1)) {
                         index = ConstantInt::get(Type::getInt32Ty(context), 0);
-                    } else {
-                        ConstantExpr* ce = dyn_cast<ConstantExpr>(si->getOperand(1));
+                    } else if (ConstantExpr* ce = dyn_cast<ConstantExpr>(si->getOperand(1))) {
                         index = ConstantInt::get(Type::getInt32Ty(context), ce->getOperand(2)->getUniqueInteger().trunc(32));
+                    } else {
+                        GetElementPtrInst* gep = dyn_cast<GetElementPtrInst>(si->getOperand(1));
+                        index = ConstantInt::get(Type::getInt32Ty(context), dyn_cast<ConstantInt>(gep->getOperand(1))->getUniqueInteger().trunc(32));
                     }
+
                     CallInst::Create(handle_store, makeArrayRef(vector<Value*>{nv, priv, vbm, index, size}), "", si);
                     privatized.insert(si);
                 }
