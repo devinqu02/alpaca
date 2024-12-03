@@ -17,6 +17,7 @@
 
 using namespace llvm;
 
+constexpr bool enable_alpaca = true;
 constexpr bool use_war_analysis = true;
 
 unordered_set<Function*> get_reachable_functions(Function* task) {
@@ -47,6 +48,10 @@ struct alpaca_pass : public ModulePass {
     alpaca_pass() : ModulePass(ID) {}
 
     bool runOnModule(Module& m) {
+        if (!enable_alpaca) {
+            return false;
+        }
+
         // Get all non-volatile variables
         unordered_set<GlobalVariable*> nv_set = find_all_nv(m);
 
