@@ -25,6 +25,8 @@ NV_GLOBAL unsigned commit_list_size[20];
 
 NV_GLOBAL volatile uint16_t curr_version = 0;
 
+NV_GLOBAL volatile int load_count = 0, store_count = 0;
+
 // Add to commit list
 void pre_commit(void* orig, void* priv_buff, unsigned size) {
     commit_list_orig[list_size] = orig;

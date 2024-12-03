@@ -11,7 +11,7 @@
 unordered_set<GlobalVariable*> find_all_nv(Module& m) {
     unordered_set<GlobalVariable*> nv_set;
     for (GlobalVariable& gv : m.globals()) {
-        if (gv.getSection() == "nv_data") {
+        if (gv.getSection() == "nv_data" && gv.getName() != "load_count" && gv.getName() != "store_count") {
             nv_set.insert(&gv);
         }
     }
