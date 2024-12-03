@@ -25,12 +25,15 @@ benchmarks: $(BENCHMARK_BINARIES)
 $(BIN_DIR)/alpaca_pass.so: $(LLVM_DIR)/alpaca_pass.cpp $(LLVM_DIR)/find_war.cpp $(LLVM_DIR)/privatize.cpp $(LLVM_DIR)/pass_helper.cpp
 	$(CXX) -Iinclude -shared -fPIC -rdynamic $(LLVM_CXXFLAGS) -g -O0 -o $@ $^
 
+$(BIN_DIR)/stats_pass.so: $(LLVM_DIR)/stats_pass.cpp $(LLVM_DIR)/pass_helper.cpp
+	$(CXX) -Iinclude -shared -fPIC -rdynamic $(LLVM_CXXFLAGS) -g -O0 -o $@ $^
+
 # Compile Emulator
 $(BIN_DIR)/emulator: $(SRC_DIR)/emulator.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 # Link tests with runtime and instrumentation
-$(BIN_DIR)/%.out: $(BIN_DIR)/%.o $(SRC_DIR)/alpaca_runtime.o $(SRC_DIR)/emulator_instrumentation.o
+$(BIN_DIR)/%.out: $(BIN_DIR)/%.o $(BIN_DIR)/alpaca_runtime.o $(SRC_DIR)/emulator_instrumentation.o
 	$(CC) $(CFLAGS) -o $@ -fno-pie -no-pie $^
 
 # Compile benchmarks (TODO add load/store count pass)
@@ -42,11 +45,16 @@ $(BIN_DIR)/%.bc: $(TEST_DIR)/%.c
 	$(CC) $(CFLAGS) -O0 -Xclang -disable-O0-optnone -fno-discard-value-names -emit-llvm -S $< -o $(BIN_DIR)/$*.bc
 
 # Run passes and finish compiling tests
-$(BIN_DIR)/%.o: $(BIN_DIR)/%.bc $(BIN_DIR)/alpaca_pass.so
+$(BIN_DIR)/%.o: $(BIN_DIR)/%.bc $(BIN_DIR)/alpaca_pass.so $(BIN_DIR)/stats_pass.so
 	opt -enable-new-pm=0 -mem2reg $(BIN_DIR)/$*.bc -o $(BIN_DIR)/$*.bc
 	llvm-dis $(BIN_DIR)/$*.bc
-	opt -enable-new-pm=0 -load $(BIN_DIR)/alpaca_pass.so -alpaca-pass -simplifycfg $(BIN_DIR)/$*.bc | llc -filetype=obj -o $@
-# (TODO add passes to run after)
+	opt -enable-new-pm=0 -load $(BIN_DIR)/alpaca_pass.so -load $(BIN_DIR)/stats_pass.so -alpaca-pass -stats-pass -simplifycfg $(BIN_DIR)/$*.bc | llc -filetype=obj -o $@
+
+
+$(BIN_DIR)/alpaca_runtime.o: $(SRC_DIR)/alpaca_runtime.c $(BIN_DIR)/stats_pass.so
+	$(CC) $(CFLAGS) -O0 -Xclang -disable-O0-optnone -fno-discard-value-names -emit-llvm -S $< -o $(BIN_DIR)/alpaca_runtime.bc
+	opt -enable-new-pm=0 -mem2reg $(BIN_DIR)/alpaca_runtime.bc -o $(BIN_DIR)/alpaca_runtime.bc
+	opt -enable-new-pm=0 -load $(BIN_DIR)/stats_pass.so -stats-pass -simplifycfg $(BIN_DIR)/alpaca_runtime.bc | llc -filetype=obj -o $@
 
 # Clean target
 clean:
