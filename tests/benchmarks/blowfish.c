@@ -574,6 +574,6 @@ void task_start_encrypt3() {
     }
 }
 
-void task_done() { exit(0); }
+void task_done() { TRANSITION_TO(end); }
 ENTRY_TASK(task_init)
 INITIALIZATION {}

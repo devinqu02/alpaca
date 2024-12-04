@@ -294,6 +294,7 @@ void task_print() {
 
 void task_done() {
     //	TRANSITION_TO(task_init);
+    TRANSITION_TO(end);
 }
 
 ENTRY_TASK(task_init)

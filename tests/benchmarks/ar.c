@@ -85,8 +85,8 @@ void task_selectMode() {
     if (GV(count) >= 3) pin_state = 2;
     if (GV(count) >= 5) pin_state = 0;
     if (GV(count) >= 7) {
-        //while (1);
-        // Added by Shubham so program finishes
+        // while (1);
+        //  Added by Shubham so program finishes
         TRANSITION_TO(end);
         // TRANSITION_TO(task_init);
     }

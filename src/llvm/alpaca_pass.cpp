@@ -18,9 +18,17 @@
 
 using namespace llvm;
 
-constexpr bool enable_alpaca = true;
-constexpr bool use_war_analysis = true;
-constexpr bool use_vbm_privatization = true;
+static cl::opt<bool> enable_alpaca(
+    "enable-alpaca", cl::desc("Allow privatization"),
+    cl::init(false));
+
+static cl::opt<bool> use_war_analysis(
+    "use-war-analysis", cl::desc("Privatize only WAR globals"),
+    cl::init(false));
+
+static cl::opt<bool> use_vbm_privatization(
+    "use-vbm-privatization", cl::desc("Selectively privatize arrays"),
+    cl::init(false));
 
 unordered_set<Function*> get_reachable_functions(Function* task) {
     unordered_set<Function*> reachable_functions;

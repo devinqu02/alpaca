@@ -269,7 +269,7 @@ void task_print_cyphertext() {
     }
     BLOCK_PRINTF_END();
 
-    exit(0);
+    TRANSITION_TO(end);
     // TRANSITION_TO(task_init);
     TRANSITION_TO(task_print_cyphertext);
 }

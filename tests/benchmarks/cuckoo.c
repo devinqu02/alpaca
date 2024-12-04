@@ -323,7 +323,7 @@ void task_done() {
     //	count++;
     //	if(count == 5){
     //		count = 0;
-    exit(0);
+    TRANSITION_TO(end);
     //	}
     //	TRANSITION_TO(task_init);
 }

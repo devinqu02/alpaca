@@ -233,7 +233,7 @@ void task_end() {
     PRINTF("%u\r\n", GV(n_4));
     PRINTF("%u\r\n", GV(n_5));
     PRINTF("%u\r\n", GV(n_6));
-    exit(0);
+    TRANSITION_TO(end);
     //	TRANSITION_TO(task_end);
 }
 
