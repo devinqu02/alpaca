@@ -25,6 +25,9 @@ void pre_commit(void* orig, void* priv_buff, unsigned size);
 void handle_load(void*, void*, uint16_t*, int, unsigned);
 void handle_store(void*, void*, uint16_t*, int, unsigned);
 
+void track_load(void*, unsigned);
+void track_store(void*, unsigned);
+
 typedef struct program_pos {
     void (*next_task)(
         void);       // This is the task that will be rerun on power failure

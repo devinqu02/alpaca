@@ -1,12 +1,16 @@
 #include "llvm/pass_helper.h"
 
+#include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
 
+#include <vector>
+
 using namespace llvm;
+using namespace std;
 
 namespace {
 
@@ -16,31 +20,37 @@ struct stats_pass : public ModulePass {
 
     bool runOnModule(Module& m) {
         LLVMContext& context = m.getContext();
+        const DataLayout& dl = m.getDataLayout();
 
-        GlobalVariable* load_count = m.getGlobalVariable("load_count");
-        if (!load_count) {
-            load_count = new GlobalVariable(m, Type::getInt32Ty(context), false, GlobalValue::ExternalLinkage, nullptr, "load_count");
+        FunctionType* track_access_type = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(context), Type::getInt32Ty(context)}, false);
+        Function* track_load = m.getFunction("track_load");
+        if (!track_load) {
+            track_load = Function::Create(track_access_type, Function::ExternalLinkage, "track_load", &m);
         }
-        GlobalVariable* store_count = m.getGlobalVariable("store_count");
-        if (!store_count) {
-            store_count = new GlobalVariable(m, Type::getInt32Ty(context), false, GlobalValue::ExternalLinkage, nullptr, "store_count");
+        Function* track_store = m.getFunction("track_store");
+        if (!track_store) {
+            track_store = Function::Create(track_access_type, Function::ExternalLinkage, "track_store", &m);
         }
         for (Function& f : m) {
+            if (&f == track_load || &f == track_store) {
+                continue;
+            }
+
             for (BasicBlock& bb : f) {
                 for (auto ii = bb.begin(); ii != bb.end(); ++ii) {
                     Instruction& i = *ii;
-                    if (is_load(&i, nullptr) && load_count) {
-                        LoadInst* load_count_old = new LoadInst(load_count->getValueType(), load_count, "load_count_old", &i);
-                        BinaryOperator* load_count_new = BinaryOperator::CreateAdd(load_count_old, ConstantInt::get(load_count_old->getType(), 1), "load_count_new", &i);
-                        new StoreInst(load_count_new, load_count, &i);
-                    } else if (is_store(&i, nullptr) && store_count) {
-                        LoadInst* store_count_old = new LoadInst(store_count->getValueType(), store_count, "store_count_old", &i);
-                        BinaryOperator* store_count_new = BinaryOperator::CreateAdd(store_count_old, ConstantInt::get(store_count_old->getType(), 1), "store_count_new", &i);
-                        new StoreInst(store_count_new, store_count, &i);
+                    if (LoadInst* li = dyn_cast<LoadInst>(&i)) {
+                        ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(li->getType()));
+                        CallInst::Create(track_load, makeArrayRef(vector<Value*>{li->getOperand(0), size}), "", li);
+                    } else if (StoreInst* si = dyn_cast<StoreInst>(&i)) {
+                        ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(si->getOperand(0)->getType()));
+                        CallInst::Create(track_store, makeArrayRef(vector<Value*>{si->getOperand(1), size}), "", si);
                     }
                 }
             }
         }
+
+        errs() << m << '\n';
 
         return true;
     }
