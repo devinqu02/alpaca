@@ -2,10 +2,12 @@
 #include "llvm/privatize.h"
 
 #include <llvm/ADT/ArrayRef.h>
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
+#include <unordered_set>
 
 void privatize_scalar(Function* task, GlobalVariable* nv, GlobalVariable* priv, unordered_map<Function*, unordered_set<GlobalVariable*>>& privatized, unordered_set<Function*>& used_functions, unordered_map<Instruction*, BitVector>& in, Function* pre_commit) {
     // Replace the non-volatile variables to privatize with their private copy
@@ -60,7 +62,7 @@ void privatize_scalar(Function* task, GlobalVariable* nv, GlobalVariable* priv, 
     }
 }
 
-void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, GlobalVariable* vbm, unordered_set<Instruction*>& privatized, unordered_set<Function*>& used_functions, unordered_map<Instruction*, BitVector>& in, Function* handle_load, Function* handle_store) {
+void privatize_array_vbm(Function* task, GlobalVariable* nv, GlobalVariable* priv, GlobalVariable* vbm, unordered_set<Instruction*>& privatized, unordered_set<Function*>& used_functions, unordered_map<Instruction*, BitVector>& in, Function* handle_load, Function* handle_store) {
     const DataLayout& dl = task->getParent()->getDataLayout();
     LLVMContext& context = task->getContext();
     ArrayType* at = dyn_cast<ArrayType>(nv->getValueType());
@@ -103,5 +105,55 @@ void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, G
                 }
             }
         }
+    }
+}
+
+void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, unordered_map<Function*, unordered_set<GlobalVariable*>>& privatized, unordered_set<Function*>& used_functions, unordered_map<Instruction*, BitVector>& in, Function* sync_priv, Function* pre_commit_array) {
+    const DataLayout& dl = task->getParent()->getDataLayout();
+    LLVMContext& context = task->getContext();
+    ArrayType* at = dyn_cast<ArrayType>(nv->getValueType());
+    ConstantInt* n = ConstantInt::get(Type::getInt32Ty(context), at->getNumElements());
+    ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(at->getArrayElementType()));
+
+    for (Function* f : used_functions) {
+        if (privatized[f].count(nv)) {
+            continue;
+        }
+
+        for (BasicBlock& bb : *f) {
+            for (Instruction& i : bb) {
+                for (int j = 0; j < i.getNumOperands(); ++j) {
+                    if (i.getOperand(j) == nv) {
+                        i.setOperand(j, priv);
+                    }
+                }
+            }
+        }
+
+        privatized[f].insert(nv);
+    }
+
+    BasicBlock& bb_first = task->front();
+    Instruction* first = &bb_first.front();
+    CallInst::Create(sync_priv, makeArrayRef(vector<Value*>{nv, priv, n, size}), "", first);
+
+    // Need to insert pre_commit_array calls before all calls of transition_to
+    vector<Instruction*> transition_insts;
+    for (BasicBlock& bb : *task) {
+        for (Instruction& i : bb) {
+            if (StoreInst* si = dyn_cast<StoreInst>(&i)) {
+                if (si->getOperand(1)->getName() == "transition_to_arg") {
+                    transition_insts.push_back(si);
+                }
+            }
+        }
+    }
+
+    for (Instruction* transition_to : transition_insts) {
+        if (in.count(transition_to) && !in[transition_to][2] && !in[transition_to][3]) {
+            continue;
+        }
+
+        CallInst::Create(pre_commit_array, makeArrayRef(vector<Value*>{nv, priv, n, size}), "", transition_to);
     }
 }

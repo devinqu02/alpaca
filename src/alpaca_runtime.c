@@ -69,6 +69,16 @@ void commit_all(void) {
     }
 }
 
+void pre_commit_array(void* orig, void* priv_buff, unsigned n, unsigned size) {
+    for (unsigned i = 0; i < n; ++i) {
+        pre_commit((char*)orig + i * size, (char*)priv_buff + i * size, size);
+    }
+}
+
+void sync_priv(void* orig, void* priv_buff, unsigned n, unsigned size) {
+    memcpy(priv_buff, orig, n * size);
+}
+
 void handle_load(void* orig, void* priv_buff, uint16_t* vbm, int i,
                  unsigned size) {
     if (vbm[i] != curr_version) {

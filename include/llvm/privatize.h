@@ -11,4 +11,6 @@ using namespace std;
 
 void privatize_scalar(Function*, GlobalVariable*, GlobalVariable*, unordered_map<Function*, unordered_set<GlobalVariable*>>&, unordered_set<Function*>&, unordered_map<Instruction*, BitVector>&, Function*);
 
-void privatize_array(Function*, GlobalVariable*, GlobalVariable*, GlobalVariable*, unordered_set<Instruction*>&, unordered_set<Function*>&, unordered_map<Instruction*, BitVector>&, Function*, Function*);
+void privatize_array_vbm(Function*, GlobalVariable*, GlobalVariable*, GlobalVariable*, unordered_set<Instruction*>&, unordered_set<Function*>&, unordered_map<Instruction*, BitVector>&, Function*, Function*);
+
+void privatize_array(Function*, GlobalVariable*, GlobalVariable*, unordered_map<Function*, unordered_set<GlobalVariable*>>&, unordered_set<Function*>&, unordered_map<Instruction*, BitVector>&, Function*, Function*);

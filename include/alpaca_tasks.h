@@ -25,6 +25,9 @@ void pre_commit(void* orig, void* priv_buff, unsigned size);
 void handle_load(void*, void*, uint16_t*, int, unsigned);
 void handle_store(void*, void*, uint16_t*, int, unsigned);
 
+void sync_priv(void*, void*, unsigned, unsigned);
+void pre_commit_array(void*, void*, unsigned, unsigned);
+
 #ifdef STATS
 #define PRINTF(fmt, ...)           \
     do { /* No operation needed */ \

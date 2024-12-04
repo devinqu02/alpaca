@@ -20,6 +20,7 @@ using namespace llvm;
 
 constexpr bool enable_alpaca = true;
 constexpr bool use_war_analysis = true;
+constexpr bool use_vbm_privatization = true;
 
 unordered_set<Function*> get_reachable_functions(Function* task) {
     unordered_set<Function*> reachable_functions;
@@ -155,10 +156,12 @@ struct alpaca_pass : public ModulePass {
             priv[gv]->copyAttributesFrom(gv);
 
             if (ArrayType* at = dyn_cast<ArrayType>(gv->getValueType())) {
-                ArrayType* vbm_type = ArrayType::get(Type::getInt16Ty(context), at->getNumElements());
-                vbm[gv] = new GlobalVariable(m, vbm_type, gv->isConstant(), gv->getLinkage(), ConstantAggregateZero::get(vbm_type), gv->getName() + "_vbm", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
-                vbm[gv]->copyAttributesFrom(gv);
-                vbm[gv]->setAlignment(Align(2));
+                if (use_vbm_privatization) {
+                    ArrayType* vbm_type = ArrayType::get(Type::getInt16Ty(context), at->getNumElements());
+                    vbm[gv] = new GlobalVariable(m, vbm_type, gv->isConstant(), gv->getLinkage(), ConstantAggregateZero::get(vbm_type), gv->getName() + "_vbm", gv, gv->getThreadLocalMode(), gv->getAddressSpace(), gv->isExternallyInitialized());
+                    vbm[gv]->copyAttributesFrom(gv);
+                    vbm[gv]->setAlignment(Align(2));
+                }
             }
         }
 
@@ -177,12 +180,24 @@ struct alpaca_pass : public ModulePass {
             handle_store->addAttributeAtIndex(i, Attribute::get(context, Attribute::NoUndef));
         }
 
+        FunctionType* naive_array_privatization_type = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(context), PointerType::getUnqual(context), Type::getInt32Ty(context), Type::getInt32Ty(context)}, false);
+        Function* sync_priv = Function::Create(naive_array_privatization_type, Function::ExternalLinkage, "sync_priv", &m);
+        Function* pre_commit_array = Function::Create(naive_array_privatization_type, Function::ExternalLinkage, "pre_commit_array", &m);
+        for (int i = 1; i <= 4; ++i) {
+            sync_priv->addAttributeAtIndex(i, Attribute::get(context, Attribute::NoUndef));
+            pre_commit_array->addAttributeAtIndex(i, Attribute::get(context, Attribute::NoUndef));
+        }
+
         unordered_map<Function*, unordered_set<GlobalVariable*>> privatized;
         unordered_set<Instruction*> handled_instructions;
         for (Function* task : tasks) {
             for (GlobalVariable* nv : need_to_privatize[task]) {
                 if (isa<ArrayType>(nv->getValueType())) {
-                    privatize_array(task, nv, priv[nv], vbm[nv], handled_instructions, reachable_functions[task], in[task][nv], handle_load, handle_store);
+                    if (use_vbm_privatization) {
+                        privatize_array_vbm(task, nv, priv[nv], vbm[nv], handled_instructions, reachable_functions[task], in[task][nv], handle_load, handle_store);
+                    } else {
+                        privatize_array(task, nv, priv[nv], privatized, reachable_functions[task], in[task][nv], sync_priv, pre_commit_array);
+                    }
                 } else {
                     privatize_scalar(task, nv, priv[nv], privatized, reachable_functions[task], in[task][nv], pre_commit);
                 }
