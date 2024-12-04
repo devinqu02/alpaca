@@ -70,9 +70,7 @@ void commit_all(void) {
 }
 
 void pre_commit_array(void* orig, void* priv_buff, unsigned n, unsigned size) {
-    for (unsigned i = 0; i < n; ++i) {
-        pre_commit((char*)orig + i * size, (char*)priv_buff + i * size, size);
-    }
+    pre_commit(orig, priv_buff, n * size);
 }
 
 void sync_priv(void* orig, void* priv_buff, unsigned n, unsigned size) {
