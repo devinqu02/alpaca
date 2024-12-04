@@ -3,7 +3,9 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/IntrinsicInst.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
 
@@ -48,6 +50,10 @@ struct stats_pass : public ModulePass {
                     } else if (StoreInst* si = dyn_cast<StoreInst>(&i)) {
                         ConstantInt* size = ConstantInt::get(Type::getInt32Ty(context), dl.getTypeAllocSize(si->getOperand(0)->getType()));
                         CallInst::Create(track_store, makeArrayRef(vector<Value*>{si->getOperand(1), size}), "", si);
+                    } else if (MemCpyInst* mci = dyn_cast<MemCpyInst>(&i)) {
+                        CastInst* size = CastInst::CreateIntegerCast(mci->getOperand(2), Type::getInt32Ty(context), false, "", mci);
+                        CallInst::Create(track_load, makeArrayRef(vector<Value*>{mci->getOperand(1), size}), "", mci);
+                        CallInst::Create(track_store, makeArrayRef(vector<Value*>{mci->getOperand(0), size}), "", mci);
                     }
                 }
             }
