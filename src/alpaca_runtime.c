@@ -5,8 +5,8 @@
 #include "alpaca_tasks.h"
 
 // Task to transition to at the end of the program
-#ifdef STATS
 NV_GLOBAL volatile int load_count = 0, store_count = 0;
+#ifdef STATS
 TASK(end) {
     printf("%d loads, %d stores\n", load_count, store_count);
     return;

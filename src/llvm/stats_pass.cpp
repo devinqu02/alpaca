@@ -1,5 +1,6 @@
 #include "llvm/pass_helper.h"
 
+#include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
@@ -30,7 +31,13 @@ struct stats_pass : public ModulePass {
         errs() << "Memory Usage: " << memory_usage << " bytes\n";
 
         GlobalVariable* load_count = m.getGlobalVariable("load_count");
+        if (!load_count) {
+            load_count = new GlobalVariable(m, Type::getInt32Ty(context), false, GlobalValue::ExternalLinkage, nullptr, "load_count");
+        }
         GlobalVariable* store_count = m.getGlobalVariable("store_count");
+        if (!store_count) {
+            store_count = new GlobalVariable(m, Type::getInt32Ty(context), false, GlobalValue::ExternalLinkage, nullptr, "store_count");
+        }
         for (Function& f : m) {
             for (BasicBlock& bb : f) {
                 for (auto ii = bb.begin(); ii != bb.end(); ++ii) {
