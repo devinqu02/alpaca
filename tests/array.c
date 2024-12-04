@@ -14,6 +14,8 @@ MAIN_TASK {
     PRINTF("%d\n", a[1]);
     ++a[1];
     PRINTF("%d\n", a[1]);
+
+    TRANSITION_TO(end);
 }
 
 INITIALIZATION {}
