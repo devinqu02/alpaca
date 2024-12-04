@@ -205,7 +205,7 @@ void task_mult_block_get_result() {
             }
 
         } else {
-            printf("WARN: block dropped: cyphertext overlow [%u > %lu]\r\n",
+            PRINTF("WARN: block dropped: cyphertext overlow [%u > %lu]\r\n",
                    GV(cyphertext_len) + NUM_DIGITS, CYPHERTEXT_SIZE);
             // carry on encoding, though
         }

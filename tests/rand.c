@@ -8,7 +8,7 @@ NV_GLOBAL double sum;
 
 TASK(loop) {
     if (iter == limit) {
-        printf("average: %f\n", sum / limit);
+        PRINTF("average: %f\n", sum / limit);
         TRANSITION_TO(end);
     }
 

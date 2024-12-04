@@ -19,8 +19,6 @@
 
 #define TASK_REF(task_name) task_name
 
-#define STATS
-
 #ifdef STATS
 #define LOG(format, ...)                   \
     do { /* No operation needed for LOG */ \
@@ -35,9 +33,6 @@
 #define BLOCK_PRINTF_END()                 \
     do { /* No operation needed for END */ \
     } while (0)
-#define PRINTF(fmt, ...)           \
-    do { /* No operation needed */ \
-    } while (0)
 #else
 #define LOG(format, ...) \
     fprintf(stderr, "[%s:%d] " format "\n", __FILE__, __LINE__, ##__VA_ARGS__)
@@ -49,7 +44,6 @@
 #define BLOCK_PRINTF_END()                 \
     do { /* No operation needed for END */ \
     } while (0)
-#define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #endif
 
 typedef void(task_t)(void);

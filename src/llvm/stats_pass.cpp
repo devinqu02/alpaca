@@ -19,7 +19,7 @@ struct stats_pass : public ModulePass {
     stats_pass() : ModulePass(ID) {}
 
     bool runOnModule(Module& m) {
-#ifndef DSTATS
+#ifndef STATS
         return false;
 #endif
         LLVMContext& context = m.getContext();

@@ -5,7 +5,7 @@
 NV_GLOBAL int a, b;
 
 void f() {
-    printf("%d %d\n", a, b);
+    PRINTF("%d %d\n", a, b);
 }
 
 TASK(task2) {
