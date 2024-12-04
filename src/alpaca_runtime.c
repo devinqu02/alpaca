@@ -6,7 +6,7 @@
 
 // Task to transition to at the end of the program
 #ifdef STATS
-NV_GLOBAL volatile int load_count = 0, store_count = 0;
+NV_GLOBAL volatile unsigned load_count = 0, store_count = 0;
 NV_GLOBAL volatile unsigned load_size = 0, store_size = 0;
 extern char __start_nv_data[];
 extern char __stop_nv_data[];
