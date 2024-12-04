@@ -30,9 +30,9 @@ TASK(task_1) {
         count++;
     }
     printf("Task 1 Count: %d\n", count);
-    // if (count > 100000000) {
-    //     TRANSITION_TO(end);
-    // }
+    if (count > 100000000) {
+        TRANSITION_TO(end);
+    }
     TRANSITION_TO(task_2);
 }
 

@@ -16,19 +16,6 @@ struct stats_pass : public ModulePass {
 
     bool runOnModule(Module& m) {
         LLVMContext& context = m.getContext();
-        const DataLayout& dl = m.getDataLayout();
-
-        int memory_usage = 0;
-        for (GlobalVariable& gv : m.globals()) {
-            if (gv.getSection() == "nv_data" && gv.getName() != "load_count" && gv.getName() != "store_count") {
-                if (ArrayType* at = dyn_cast<ArrayType>(gv.getValueType())) {
-                    memory_usage += dl.getTypeAllocSize(at->getArrayElementType()) * at->getNumElements();
-                } else {
-                    memory_usage += dl.getTypeAllocSize(gv.getValueType());
-                }
-            }
-        }
-        errs() << "Memory Usage: " << memory_usage << " bytes\n";
 
         GlobalVariable* load_count = m.getGlobalVariable("load_count");
         if (!load_count) {

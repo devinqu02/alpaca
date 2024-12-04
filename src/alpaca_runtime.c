@@ -5,10 +5,13 @@
 #include "alpaca_tasks.h"
 
 // Task to transition to at the end of the program
-NV_GLOBAL volatile int load_count = 0, store_count = 0;
 #ifdef STATS
+NV_GLOBAL volatile int load_count = 0, store_count = 0;
+extern char __start_nv_data[];
+extern char __stop_nv_data[];
 TASK(end) {
     printf("%d loads, %d stores\n", load_count, store_count);
+    printf("%ld bytes used\n", __stop_nv_data - __start_nv_data);
     return;
 }
 #else

@@ -1,5 +1,6 @@
 CC = clang
-CFLAGS = -Wall -Wextra -Iinclude
+CFLAGS = -Wall -Wextra -Iinclude -DSTATS
+#remove dstats when not collecting stats
 
 CXX = clang++  # Use clang++ for C++ files
 
@@ -38,7 +39,7 @@ $(BIN_DIR)/%.out: $(BIN_DIR)/%.o $(BIN_DIR)/alpaca_runtime.o $(SRC_DIR)/emulator
 
 # Link tests with runtime and stats instrumentation
 $(BIN_DIR)/%_cont_power.out: $(BIN_DIR)/%.o $(BIN_DIR)/alpaca_runtime.o
-	$(CC) $(CFLAGS) -o $@ -DSTATS -fno-pie -no-pie $^
+	$(CC) $(CFLAGS) -o $@ -fno-pie -no-pie $^
 
 # Compile benchmarks (TODO add load/store count pass)
 $(BIN_DIR)/benchmarks_%.bc: $(BENCHMARKS_DIR)/%.c
