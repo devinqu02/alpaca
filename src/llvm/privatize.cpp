@@ -74,7 +74,7 @@ void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, G
                 }
 
                 Constant* index;
-                if (is_load(&i, nv) && (in[&i][0] || in[&i][2])) {
+                if (is_load(&i, nv)) {
                     LoadInst* li = dyn_cast<LoadInst>(&i);
                     if (nv == li->getOperand(0)) {
                         index = ConstantInt::get(Type::getInt32Ty(context), 0);
@@ -87,7 +87,7 @@ void privatize_array(Function* task, GlobalVariable* nv, GlobalVariable* priv, G
 
                     CallInst::Create(handle_load, makeArrayRef(vector<Value*>{nv, priv, vbm, index, size}), "", li);
                     privatized.insert(li);
-                } else if (is_store(&i, nv) && (in[&i][0] || in[&i][1])) {
+                } else if (is_store(&i, nv)) {
                     StoreInst* si = dyn_cast<StoreInst>(&i);
                     if (nv == si->getOperand(1)) {
                         index = ConstantInt::get(Type::getInt32Ty(context), 0);

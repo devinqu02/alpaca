@@ -97,6 +97,9 @@ pair<bool, unordered_map<Instruction*, BitVector>> is_war(Function& task, Global
                                     found = true;
                                     out_i[i][3] = 1;
                                 }
+                                if (isa<ArrayType>(nv->getValueType()) && in_i[i][3]) {
+                                    found = true;
+                                }
                                 out_i[i][0] = out_i[i][1] = 0;
                             }
                         }
