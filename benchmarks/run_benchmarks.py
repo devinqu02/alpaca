@@ -3,7 +3,7 @@ import os
 import pandas as pd
 
 # Configurations
-BIN_DIR = "bin"  # Directory where benchmark outputs are stored
+BIN_DIR = "../bin"  # Directory where benchmark outputs are stored
 PROGRAM_NAMES = ["ar", "bc", "blowfish", "cem", "cuckoo", "rsa"]
 VERSIONS = ["alpaca", "no_alpaca", "privatize_all", "war_only"]
 

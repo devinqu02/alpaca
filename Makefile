@@ -9,7 +9,7 @@ SRC_DIR = src
 LLVM_DIR = $(SRC_DIR)/llvm
 BIN_DIR = bin
 TEST_DIR = tests
-BENCHMARKS_DIR = $(TEST_DIR)/benchmarks
+BENCHMARKS_DIR = benchmarks
 
 LLVM_CXXFLAGS = $(shell llvm-config --cxxflags)
 
