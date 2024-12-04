@@ -29,8 +29,6 @@ void handle_store(void*, void*, uint16_t*, int, unsigned);
 #define PRINTF(fmt, ...)           \
     do { /* No operation needed */ \
     } while (0)
-void track_load(void*, unsigned);
-void track_store(void*, unsigned);
 #else
 #define PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #endif
