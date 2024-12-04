@@ -5,9 +5,6 @@
 
 #include "translation.h"
 
-// timer for measuring performance
-unsigned overflow = 0;
-
 #define NUM_INSERTS (NUM_BUCKETS / 4)  // shoot for 25% occupancy
 #define NUM_LOOKUPS NUM_INSERTS
 #define NUM_BUCKETS 128  // must be a power of 2

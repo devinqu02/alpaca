@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "alpaca_tasks.h"
 #include "translation.h"
 
 #define KEY_SIZE_BITS 64
@@ -23,7 +22,6 @@ typedef struct {
 #endif
 
 #define PRINT_HEX_ASCII_COLS 8
-unsigned overflow = 0;
 
 // Blocks are padded with these digits (on the MSD side). Padding value must be
 // chosen such that block value is less than the modulus. This is accomplished
@@ -511,6 +509,7 @@ void task_reduce_quotient() {
     LOG("reduce: quotient: n_div=%x q0=%x\r\n", GV(n_div), GV(quotient));
 
     GV(quotient)++;
+    
     do {
         GV(quotient)--;
         // qn = mult16(GV(n_div), GV(quotient));
